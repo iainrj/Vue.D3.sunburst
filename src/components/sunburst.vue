@@ -314,30 +314,61 @@ export default {
        */
       this.$emit("clickNode", { node: value, sunburst: this });
     },
-
+    async setNodesHighlightColor({
+      filterFn = () => ({}),
+      animatioDuration = null,
+      fillColor = null
+    }) {
+      this.vis
+        .selectAll("path")
+        .filter(filterFn)
+        .transition()
+        .duration(animatioDuration)
+        .style("fill", d => (fillColor ? fillColor : this.colorGetter(d.data)));
+    },
     /**
      * Highlight the arc path leading to a given node.
      * @param {Object} node the D3 node to highlight
-     * @param {Number} opacity opacity of the none highlighted nodes, default to 0.3
      */
-    highlightPath(node, opacity = 0.3) {
+    highlightPath(node) {
       const sequenceArray = node.ancestors();
+      var nonRootParent = sequenceArray.filter(n => n.depth === 1);
+      var family =
+        (nonRootParent.length && nonRootParent[0].descendants()) || [];
 
-      this.vis
-        .selectAll("path")
-        .filter(d => sequenceArray.indexOf(d) === -1)
-        .transition()
-        .duration(this.inAnimationDuration)
-        .style("opacity", opacity);
+      if (!node.parent && node.depth === 0) {
+        // hovering over root node so color all nodes
+        this.setNodesHighlightColor({
+          animatioDuration: this.outAnimationDuration
+        });
+        return;
+      }
 
-      this.vis
-        .selectAll("path")
-        .filter(d => sequenceArray.indexOf(d) >= 0)
-        .style("opacity", 1);
+      // Set all nodes not under non-root parent to light grey
+      this.setNodesHighlightColor({
+        filterFn: d => sequenceArray.indexOf(d) === -1,
+        animatioDuration: this.inAnimationDuration,
+        fillColor: "#F3F5F7"
+      })
+        .then(
+          // Set all descendents of the non-root parent to dark grey
+          this.setNodesHighlightColor({
+            filterFn: d =>
+              family.indexOf(d) >= 0 && sequenceArray.indexOf(d) === -1,
+            animatioDuration: this.inAnimationDuration,
+            fillColor: "#CFD8DC"
+          })
+        )
+        .then(
+          // Set color for all nodes on path to current node
+          this.setNodesHighlightColor({
+            filterFn: d => sequenceArray.indexOf(d) >= 0,
+            animatioDuration: this.inAnimationDuration
+          })
+        );
 
       this.graphNodes.highlighted = node;
     },
-
     /**
      * Zoom to a given node.
      * @param {Object} node the D3 node to zoom to.
@@ -373,7 +404,7 @@ export default {
         .selectAll("path")
         .transition()
         .duration(this.outAnimationDuration)
-        .style("opacity", 1);
+        .style("fill", d => this.colorGetter(d.data));
     }
   },
 
